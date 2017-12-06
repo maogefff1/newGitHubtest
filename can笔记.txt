@@ -1,0 +1,163 @@
+sliding:test2
+Indicator:Haha
+
+
+for (String cmd : cmdList) ？？？？？
+
+
+
+还需要看的：
+getResources
+Spinner
+ScrollView
+
+libCanSocket.so
+开关流程：
+疑问cmdList哪里用到了？
+cmdList[] = { "su 0 netcfg can0 down",
+	"su 0 ip link set can0 type can bitrate 1000000",
+	"su 0 netcfg can0 up"};
+
+cmdList[1] = "su 0 ip link set can0 type can bitrate " +can0bitrate+ "  triple-sampling on"
+
+1.组好包cmdList，并通过shell执行
+2.创建socket
+2.1.创建socket对象：_openSocketBCM或者_openSocketRAW
+2.2.获取ifname（can0或者can1）对应的CAN设备内核中的序号：_discoverInterfaceIndex
+2.3.将CAN设备绑定到文件描述符中：_bindToSocket
+
+3. 开接收线程Thread
+3.1 接收：_recvFrame
+3.2 
+
+
+发送流程
+libCanSocket.so
+发送流程：
+1._setEFFSFF设置为扩展帧
+2.socket.send
+
+
+
+
+
+
+
+
+
+
+
+
+struct can_frame {
+canid_t can_id;  // 32 bit CAN_ID + EFF/RTR/ERR flags
+__u8    can_dlc; // frame payload length in byte (0 .. CAN_MAX_DLEN)
+__u8    __pad;   // padding
+__u8    __res0;  // reserved / padding
+__u8    __res1;  // reserved / padding
+__u8    data[CAN_MAX_DLEN] __attribute__((aligned(8)));
+
+
+传给内核的结构体
+struct can_frame {
+canid_t can_id;  /* 32 bit CAN_ID + EFF/RTR/ERR flags */
+__u8    can_dlc; /* frame payload length in byte (0 .. CAN_MAX_DLEN) */
+__u8    data[CAN_MAX_DLEN] __attribute__((aligned(8)));
+};
+
+
+
+JNIsocket流程：
+1. shell命令
+su 0 netcfg can0 down
+su 0 ip link set can0 type can bitrate 1000000 triple-sampling on
+su 0 netcfg can0 up
+
+2. 创建socket
+2.1 socket(PF_CAN, socket_type, protocol);
+2.2 查找ifName在内核驱动中对应的CAN设备序号 ioctl(socketFd, SIOCGIFINDEX, &ifreq);
+2.3 发送设置好的一帧数据:    sendto(fd, &frame, sizeof(frame), flags,
+			reinterpret_cast<struct sockaddr *>(&addr),
+			sizeof(addr));
+
+
+
+
+
+
+
+
+
+笔记：
+
+1. 创建套接字
+  s = socket(PF_CAN, SOCK_RAW, CAN_RAW); 原始的
+  或者
+  s = socket(PF_CAN, SOCK_DGRAM, CAN_BCM);  广播的
+
+2. 指定can的索引：如果为0，则表示所有的can
+  struct ifreq ifr;
+  struct sockaddr_can addr;
+  strcpy(ifr.ifr_name, "can0" );
+  ioctl(s, SIOCGIFINDEX, &ifr);
+
+3. 绑定某个can接口
+  bind(s, (struct sockaddr *)&addr, sizeof(addr));
+
+4. 读写
+  read/write,send/sendto/sendmsg, recv*/
+
+其他：
+1. 指定接口索引需要调用ioctl()（比如对于没有错误检查CAN_RAW套接字）:
+  
+
+
+
+一个can帧的结构体
+/*
+* 扩展格式识别符由 29 位组成。其格式包含两个部分：11 位基本 ID、18 位扩展 ID。
+* Controller Area Network Identifier structure
+*
+* bit 0-28     : CAN识别符 (11/29 bit)
+* bit 29     : 错误帧标志 (0 = data frame, 1 = error frame)
+* bit 30     : 远程发送请求标志 (1 = rtr frame)
+* bit 31     :帧格式标志 (0 = standard 11 bit, 1 = extended 29 bit)
+*/
+typedef __u32 canid_t;
+
+struct can_frame { 
+     canid_t can_id;  /* 32 bit CAN_ID + EFF/RTR/ERR flags */
+      __u8    can_dlc; /* 数据长度: 0 .. 8 */
+      __u8    data[8] __attribute__((aligned(8))); 
+ };
+
+
+
+
+
+
+
+
+流程：
+1. socket
+2. bind can接口和can id
+
+
+
+遥控帧和数据帧：
+数据帧和遥控帧之间的不同
+遥控帧没有数据域，在仲裁域里的RTR位是隐性电平，而数据帧RTR则为显性的。
+没有数据的数据帧与遥控帧可以通过RTR为来区分
+遥控帧没有数据域，其数据长度码用来干什么？
+遥控帧的数据长度码的值表示对应请求的数据帧的数据长度码。
+没有数据域的数据帧用来干什么？
+例如，数据帧可以被各单元用来作为周期连接确认/应答，或者仲裁域本身带有实质性信息。
+
+
+
+EFF   扩展帧 还是标准帧
+RTR   远程帧还是数据帧
+ERR   错误帧
+
+
+
+
